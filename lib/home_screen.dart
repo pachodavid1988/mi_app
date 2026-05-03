@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
-import 'item.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final FirebaseFirestore firestore;
+
+  // 👉 Ahora acepta un Firestore externo (real o simulado)
+  const HomeScreen({super.key, FirebaseFirestore? firestore})
+      : firestore = firestore ?? FirebaseFirestore.instance;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -11,26 +15,30 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nombreController = TextEditingController();
-  final _cantidadController = TextEditingController();
-  final List<Item> _items = [];
+  final _passwordController = TextEditingController();
 
   void _agregarItem() {
     if (_formKey.currentState!.validate()) {
-      setState(() {
-        _items.add(Item(
-          nombre: _nombreController.text,
-          cantidad: int.parse(_cantidadController.text),
-        ));
+      widget.firestore.collection('items').add({
+        'nombre': _nombreController.text,
+        'password': _passwordController.text,
       });
       _nombreController.clear();
-      _cantidadController.clear();
+      _passwordController.clear();
     }
+  }
+
+  @override
+  void dispose() {
+    _nombreController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Lista dinámica')),
+      appBar: AppBar(title: const Text('Lista dinámica con Firebase')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -43,14 +51,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     controller: _nombreController,
                     decoration: const InputDecoration(labelText: 'Nombre'),
                     validator: (value) =>
-                        value!.isEmpty ? 'Ingrese un nombre' : null,
+                        value == null || value.isEmpty ? 'Ingrese un nombre' : null,
                   ),
                   TextFormField(
-                    controller: _cantidadController,
-                    decoration: const InputDecoration(labelText: 'Cantidad'),
-                    keyboardType: TextInputType.number,
+                    controller: _passwordController,
+                    decoration: const InputDecoration(labelText: 'Contraseña'),
+                    obscureText: true,
                     validator: (value) =>
-                        value!.isEmpty ? 'Ingrese una cantidad' : null,
+                        value == null || value.isEmpty ? 'Ingrese una contraseña' : null,
                   ),
                   const SizedBox(height: 10),
                   ElevatedButton(
@@ -62,13 +70,25 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 20),
             Expanded(
-              child: ListView.builder(
-                itemCount: _items.length,
-                itemBuilder: (context, index) {
-                  final item = _items[index];
-                  return ListTile(
-                    title: Text(item.nombre),
-                    subtitle: Text('Cantidad: ${item.cantidad}'),
+              child: StreamBuilder<QuerySnapshot>(
+                stream: widget.firestore.collection('items').snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return const Center(child: Text('Error al cargar datos'));
+                  }
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final docs = snapshot.data!.docs;
+                  return ListView.builder(
+                    itemCount: docs.length,
+                    itemBuilder: (context, index) {
+                      final data = docs[index].data() as Map<String, dynamic>;
+                      return ListTile(
+                        title: Text(data['nombre']),
+                        subtitle: Text('Contraseña: ${data['password']}'),
+                      );
+                    },
                   );
                 },
               ),
